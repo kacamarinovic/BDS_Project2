@@ -28,57 +28,7 @@ services:
       - zookeeper
     networks:
       - bde2
-  # jobmanager:
-    # image: flink
-    # container_name: jobmanager
-    # expose:
-      # - "6123"
-    # ports:
-      # - "8081:8081"
-    # command: jobmanager
-    # environment:
-      # - JOB_MANAGER_RPC_ADDRESS=jobmanager
-  # taskmanager:
-    # image: flink
-    # container_name: taskmanager
-    # expose:
-      # - "6121"
-      # - "6122"
-    # depends_on:
-      # - jobmanager
-    # command: taskmanager
-    # links:
-      # - "jobmanager:jobmanager"
-    # environment:
-      # - JOB_MANAGER_RPC_ADDRESS=jobmanager
-  # taskmanager-2:
-    # image: flink
-    # container_name: taskmanager-2
-    # expose:
-      # - "6121"
-      # - "6122"
-    # depends_on:
-      # - jobmanager
-    # command: taskmanager
-    # links:
-      # - "jobmanager:jobmanager"
-    # environment:
-      # - JOB_MANAGER_RPC_ADDRESS=jobmanager
-  # cassandra:
-    # image: cassandra:latest
-    # container_name: cassandra
-    # ports:
-      # - "9042:9042"
-    # volumes:
-      # - cassandra_data:/var/lib/cassandra 
-  # cassandra-setup:
-    # build: ./cassandra
-    # image: cassandra-setup
-    # container_name: cassandra-setup
-    # depends_on:
-      # - cassandra
-    # command: bash -c "sleep 30 && echo Creating Keyspace && cqlsh cassandra -f schema.cql && sleep infinity"
-    # restart: unless-stopped
+
   cassandra:
     image: cassandra:latest
     container_name: cassandra-db
@@ -103,37 +53,76 @@ services:
     networks:
       - bde2
 
-  spark:
-    container_name: spark-master-bde2
-    image: docker.io/bitnami/spark:latest
-    environment:
-      - SPARK_MODE=master
+  jobmanager:
+    build: ./flink
+    image: my-flink:1.17.1
+    container_name: flink-jobmanager
+    command: jobmanager
     ports:
-      - '8080:8080'
-      - '7077:7077'
-      #- '4040:4040'
-    networks:
-      - bde2
-  spark-worker:
-    container_name: spark-worker-bde2
-    image: docker.io/bitnami/spark:latest
+      - "8081:8081"
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master-bde2:7077
-    networks:
-      - bde2
-  spark-streaming:
-    build: ./spark_streaming
-    image: spark_streaming
-    container_name: spark_streaming_kontejner
+      - PYFLINK_CLIENT_EXECUTABLE=/usr/bin/python3
+      - PYFLINK_PYTHON=/usr/bin/python3
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        parallelism.default: 2
     depends_on:
       - kafka
-      - spark
-      - spark-worker
-      - cassandra
-    restart: on-failure
     networks:
       - bde2
+    volumes:
+      - ./flink:/opt/flink/app
+
+  taskmanager:
+    image: my-flink:1.17.1
+    container_name: flink-taskmanager
+    command: taskmanager
+    environment:
+      - PYFLINK_CLIENT_EXECUTABLE=/usr/bin/python3
+      - PYFLINK_PYTHON=/usr/bin/python3
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    depends_on:
+      - jobmanager
+    networks:
+      - bde2
+    volumes:
+      - ./flink:/opt/flink/app
+
+  # spark:
+  #   container_name: spark-master-bde2
+  #   image: docker.io/bitnami/spark:latest
+  #   environment:
+  #     - SPARK_MODE=master
+  #   ports:
+  #     - '8080:8080'
+  #     - '7077:7077'
+  #   networks:
+  #     - bde2
+  # spark-worker:
+  #   container_name: spark-worker-bde2
+  #   image: docker.io/bitnami/spark:latest
+  #   environment:
+  #     - SPARK_MODE=worker
+  #     - SPARK_MASTER_URL=spark://spark-master-bde2:7077
+  #   networks:
+  #     - bde2
+  # spark-streaming:
+  #   build: ./spark_streaming
+  #   image: spark_streaming
+  #   container_name: spark_streaming_kontejner
+  #   depends_on:
+  #     - kafka
+  #     - spark
+  #     - spark-worker
+  #     - cassandra
+  #   restart: on-failure
+  #   networks:
+  #     - bde2
 networks:
   bde2:
       external: true
